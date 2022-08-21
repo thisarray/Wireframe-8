@@ -35,7 +35,7 @@ The game screen appears here if your browser supports the Canvas API.
 
 <h2>Attribution</h2>
 
-<p>This code example is taken from <a href="https://wireframe.raspberrypi.org/issues/8">Wireframe #8 Source Code: Missile Command's scary vapour trails, pages 32-33</a>.
+<p>This code example is taken from <a href="https://wireframe.raspberrypi.com/issues/8">Wireframe #8 Source Code: Missile Command's scary vapour trails, pages 32-33</a>.
 The code example was created by Daniel Pope.</p>
 
 <p>Licensed under <a href="https://creativecommons.org/licenses/by-nc-sa/3.0/legalcode">Creative Commons Attribution-NonCommercial-ShareAlike 3.0 Unported</a>.</p>
@@ -226,8 +226,7 @@ function reset() {
 }
 
 window.addEventListener('load', (event) => {
-  reset();
-  screen.set_mode('#screen', '#reset', '#pause');
+  screen.init();
 });
 </script>
 </body>
