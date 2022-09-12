@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+
+<html lang="en-US">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Recreation of copter using jsgame0.js</title>
+  <script src="../../jsgame0.js"></script>
+  <style type="text/css" media="screen">
+body {
+  background-color: white;
+  color: black;
+}
+.hidden {
+  display: none;
+}
+#original {
+  margin-left: 1em;
+}
+#screen {
+  background-color: #0FF;
+/* game runs at native resolution; use CSS to scale up the screen */
+  width: 320px;
+  height: 512px;
+}
+  </style>
+</head>
+
+<body>
+<section id="imageLoader" class="hidden">
+  <img class="hidden" src="images/bird_1.png" alt="bird_1" data-name="bird_1">
+  <img class="hidden" src="images/bird_2.png" alt="bird_2" data-name="bird_2">
+  <img class="hidden" src="images/bird_3.png" alt="bird_3" data-name="bird_3">
+  <img class="hidden" src="images/coin_1.png" alt="coin_1" data-name="coin_1">
+  <img class="hidden" src="images/coin_2.png" alt="coin_2" data-name="coin_2">
+  <img class="hidden" src="images/coin_3.png" alt="coin_3" data-name="coin_3">
+  <img class="hidden" src="images/coin_4.png" alt="coin_4" data-name="coin_4">
+  <img class="hidden" src="images/font.png" alt="font" data-name="font">
+  <img class="hidden" src="images/helicopter_1.png" alt="helicopter_1" data-name="helicopter_1">
+  <img class="hidden" src="images/helicopter_2.png" alt="helicopter_2" data-name="helicopter_2">
+  <img class="hidden" src="images/helicopter_3.png" alt="helicopter_3" data-name="helicopter_3">
+  <img class="hidden" src="images/platform_center.png" alt="platform_center" data-name="platform_center">
+  <img class="hidden" src="images/platform_edge.png" alt="platform_edge" data-name="platform_edge">
+  <img class="hidden" src="images/sea_1.png" alt="sea_1" data-name="sea_1">
+  <img class="hidden" src="images/sea_2.png" alt="sea_2" data-name="sea_2">
+  <img class="hidden" src="images/sea_3.png" alt="sea_3" data-name="sea_3">
+</section>
+
+<main>
+<h1>Recreation of copter using jsgame0.js</h1>
+
+<canvas id="screen">
+The game screen appears here if your browser supports the Canvas API.
+</canvas>
+<section id="controls">
+  <button type="button" id="reset">Reset</button>
+  <button type="button" id="pause">Pause</button>
+</section>
+
+<p>Use Z and X to move left and right, and SHIFT to thrust upwards.
+When you inevitably die, press SPACE to start a new game.</p>
+
+<p>The recreation of copter using <a href="https://github.com/thisarray/jsgame0">jsgame0.js</a> is based on the description of the gameplay.
+<br>I was not able the reverse engineer the assembly code.</p>
+
+<p><a href="https://bbc.godbolt.org/?autoboot&disc=https://dl.dropboxusercontent.com/s/v6ni7xuqcqauli5/copter.ssd">Play the original online</a>.</p>
+
+<h2>Attribution</h2>
+
+<p>This code example is taken from <a href="https://wireframe.raspberrypi.com/issues/8">Wireframe #8 Squeezing the Beeb: make a helicopter score attack game, pages 34-41</a>.
+All code by Eben Upton.</p>
+
+<p>Graphics by Sam Alder and Alex Carter, based on resources developed for an event at the Centre for Computing History in Cambridge.</p>
+
+<p>Licensed under <a href="https://creativecommons.org/licenses/by-nc-sa/3.0/legalcode">Creative Commons Attribution-NonCommercial-ShareAlike 3.0 Unported</a>.</p>
+
+</main>
+
+<script>
+WIDTH = 160;
+/*
+ * The screen is split vertically into 32 8-pixel tall rows.
+ */
+HEIGHT = 32 * 8;
+
+/*
+ * Duration in seconds to stay on each frame.
+ */
+const DELAY = 0.5;
+
+/*
+ * Constant arbitrary number added to the y coordinate to simulate gravity.
+ */
+const GRAVITY = 1;
+
+/*
+ * String characters in font.png.
+ */
+const FONT_STRING = '0123456789 ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+
+/*
+ * Integer amount of fuel the helicopter has when fully fueled.
+ */
+const FULL_FUEL = 32;
+
+/*
+ * Integer number of pixels to move each frame.
+ *
+ * Birds travel horizontally at one pixel per frame.
+ */
+const MOVEMENT_SPEED = 1;
+
+/*
+ * Return a random integer N such that min <= N < max.
+ */
+function getRandomInteger(min, max) {
+  min = Math.ceil(min);
+  max = Math.floor(max);
+  return Math.floor((Math.random() * (max - min)) + min);
+}
+
+/*
+ * Actor subclass to show each frame for DELAY seconds.
+ */
+class AnimatedActor extends Actor {
+  constructor(prefix, frameCount, x, y) {
+    if (typeof prefix !== 'string') {
+      throw new TypeError('prefix must be a non-empty string.');
+    }
+    if (prefix.length <= 0) {
+      throw new RangeError('prefix must be a non-empty string.');
+    }
+    if (typeof frameCount !== 'number') {
+      throw new TypeError('frameCount must be a positive number.');
+    }
+    if (frameCount <= 0) {
+      throw new RangeError('frameCount must be a positive number.');
+    }
+
+    super(prefix + '_1');
+    this.topleft = [x, y];
+
+    this.prefix = prefix;
+    this.frameCount = frameCount;
+    this.timer = 0;
+    this.index = 1;
+  }
+
+  update(dt) {
+    this.timer += dt;
+    if (this.timer >= DELAY) {
+      this.index++;
+      if (this.index > this.frameCount) {
+        this.index = 1;
+      }
+      this.name = this.prefix + '_' + this.index;
+      this.timer = 0;
+    }
+  }
+}
+
+class Bird extends AnimatedActor {
+  constructor(x, y) {
+    super('bird', 3, x, y);
+
+    // Start birds traveling to the right
+    this.dx = MOVEMENT_SPEED;
+  }
+
+  update(dt) {
+    super.update(dt);
+
+    this.x += this.dx;
+    if ((this.left < 0) || (this.right > WIDTH)) {
+      this.dx *= -1;
+    }
+  }
+}
+
+// Coins do not move
+class Coin extends AnimatedActor {
+  constructor(x, y) {
+    super('coin', 4, x, y);
+  }
+}
+
+class Helicopter extends AnimatedActor {
+  constructor(x, y) {
+    super('helicopter', 3, x, y);
+
+    this.dead = false;
+    this.fuel = FULL_FUEL;
+    this.landed = false;
+    this.coinCount = 0;
+    this.score = 0;
+
+    this.dx = MOVEMENT_SPEED * 2;
+    // Thrust is based on FULL_FUEL getting the helicopter to the top
+    this.dy = Math.floor(HEIGHT / FULL_FUEL);
+  }
+
+  saveScore() {
+    // Save the current high score
+    let highscore = localStorage.getItem('highscore');
+    if (highscore == null) {
+      highscore = 0;
+    }
+    else {
+      highscore = parseInt(highscore, 10);
+    }
+    if (this.score > highscore) {
+      localStorage.setItem('highscore', this.score);
+    }
+  }
+
+  update(dt, birds, coins, platform) {
+    super.update(dt);
+
+    if (keyboard[keys.LSHIFT] || keyboard[keys.RSHIFT]) {
+      if (this.fuel > 0) {
+        this.landed = false;
+        this.y = Math.max(8, this.y - this.dy);
+        this.fuel--;
+      }
+    }
+
+    if (!this.landed) {
+      this.y += GRAVITY;
+      if (keyboard[keys.Z]) {
+        this.x -= this.dx;
+        if (this.left < 0) {
+          this.left = 0;
+        }
+      }
+      if (keyboard[keys.X]) {
+        this.x += this.dx;
+        if (this.right > WIDTH) {
+          this.right = WIDTH;
+        }
+      }
+    }
+
+    if (this.bottom > (HEIGHT - 8)) {
+      // Fell into the sea
+      this.dead = true;
+      this.saveScore();
+      return;
+    }
+
+    if (this.colliderect(platform)) {
+      // Landed on the platform
+      this.fuel = FULL_FUEL;
+      this.landed = true;
+      if (this.coinCount > 0) {
+        this.score += Math.pow(2, this.coinCount - 1);
+      }
+      this.coinCount = 0;
+      this.saveScore();
+    }
+
+    for (let bird of birds) {
+      if (this.colliderect(bird)) {
+        this.dead = true;
+        this.saveScore();
+        return;
+      }
+    }
+
+    let i = 0;
+    for (let coin of coins) {
+      if (this.colliderect(coin)) {
+        this.coinCount++;
+        coins.splice(i, 1);
+      }
+      i++;
+    }
+  }
+}
+
+class Sea extends AnimatedActor {
+  constructor(x, y) {
+    super('sea', 3, x, y);
+  }
+}
+
+class Platform extends Actor {
+  constructor() {
+    super('platform_center');
+    this.topleft = [0, HEIGHT - 16];
+
+    this.dx = MOVEMENT_SPEED;
+  }
+
+  /*
+   * Override width and height because the platform has 3 pieces.
+   */
+  get width() {
+    return 48;
+  }
+  get height() {
+    return 8;
+  }
+
+  draw() {
+    screen.blit('platform_edge', [this.x, this.y]);
+    screen.blit('platform_center', [this.x + 16, this.y]);
+    screen.blit('platform_edge', [this.x + 32, this.y]);
+  }
+
+  update(dt) {
+    this.x += this.dx;
+    if ((this.left < 0) || (this.right > WIDTH)) {
+      this.dx *= -1;
+    }
+  }
+}
+
+let birds, coins, sea, platform, helicopter;
+
+function reset() {
+  birds = [];
+  coins = [];
+  sea = [];
+
+  // The top row is for the scores and fuel
+  // Give a 2 row buffer above platform
+  // The penultimate row is the platform
+  for (let i = 8; i < (HEIGHT - (8 * 4)); i += 8) {
+    // Randomly generate birds and coins
+    let roll = getRandomInteger(0, 100);
+    if (roll < 15) {
+      birds.push(new Bird(getRandomInteger(16, WIDTH - 16), i));
+    }
+    else if (roll < 30) {
+      coins.push(new Coin(getRandomInteger(16, WIDTH - 16), i));
+    }
+  }
+
+  // The bottom row is the sea
+  for (let i = 0; i < WIDTH; i += 32) {
+    sea.push(new Sea(i, HEIGHT - 8));
+  }
+
+  platform = new Platform();
+  helicopter = new Helicopter(0, 8);
+}
+
+function draw() {
+  screen.clear('transparent');
+  for (let a of birds.concat(coins, sea)) {
+    a.draw();
+  }
+  platform.draw();
+  helicopter.draw();
+
+  // Draw the top row with the scores and fuel
+  let i = 0,
+      highscore = localStorage.getItem('highscore');
+  if (highscore == null) {
+    highscore = '0';
+  }
+  for (let c of Array.from(highscore.padStart(5, '0'))) {
+    screen.blit('font', new Rect(FONT_STRING.indexOf(c) * 8, 0, 8, 8), new Rect(i * 8, 0, 8, 8));
+    i++;
+  }
+  i++;
+  for (let c of Array.from(helicopter.score.toFixed(0).padStart(5, '0'))) {
+    screen.blit('font', new Rect(FONT_STRING.indexOf(c) * 8, 0, 8, 8), new Rect(i * 8, 0, 8, 8));
+    i++;
+  }
+  i++;
+  screen.draw.filled_rect(new Rect(i * 8, 2, helicopter.fuel * 2, 4), 'red');
+}
+
+function update(dt) {
+  if (helicopter.dead) {
+    return;
+  }
+
+  for (let a of birds.concat(coins, sea)) {
+    a.update(dt);
+  }
+  helicopter.update(dt, birds, coins, platform);
+  if (!helicopter.landed) {
+    platform.update(dt);
+  }
+}
+
+function on_key_down(key) {
+  if (key === keys.SPACE) {
+    reset();
+  }
+}
+
+window.addEventListener('load', (event) => {
+  screen.init();
+});
+</script>
+</body>
+
+</html>
